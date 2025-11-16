@@ -605,3 +605,89 @@ body {
 .game-logo:hover {
     animation: heartbeat 1s ease-in-out;
 }
+
+/* Intensity Switcher (during gameplay) */
+.intensity-switcher {
+    margin: 20px 0;
+    padding: 15px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 15px;
+    text-align: center;
+}
+
+.intensity-switcher label {
+    display: block;
+    font-size: 1.1em;
+    font-weight: bold;
+    color: #fff;
+    margin-bottom: 12px;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.intensity-buttons {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.intensity-btn {
+    padding: 10px 15px;
+    background: rgba(255, 255, 255, 0.9);
+    border: 3px solid transparent;
+    border-radius: 10px;
+    font-size: 0.95em;
+    font-weight: bold;
+    color: #f5576c;
+    cursor: pointer;
+    transition: all 0.3s;
+    white-space: nowrap;
+}
+
+.intensity-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    background: white;
+}
+
+.intensity-btn.active {
+    background: linear-gradient(135deg, #f5576c, #ff6ec4);
+    color: white;
+    border-color: white;
+    box-shadow: 0 5px 20px rgba(245, 87, 108, 0.5);
+    transform: translateY(-2px);
+}
+
+.intensity-btn.active:hover {
+    box-shadow: 0 8px 25px rgba(245, 87, 108, 0.6);
+}
+
+/* Update intensity option styling to include random */
+.intensity-option input[value="random"]:checked + .intensity-card {
+    border-color: #9d50bb;
+    background: linear-gradient(135deg, #a8edea, #fed6e3);
+}
+
+/* Intensity Badge (shown when random mode is active) */
+.intensity-badge {
+    display: inline-block;
+    margin-left: 15px;
+    padding: 8px 16px;
+    background: linear-gradient(135deg, #f5576c, #ff6ec4);
+    color: white;
+    border-radius: 20px;
+    font-size: 0.6em;
+    font-weight: bold;
+    box-shadow: 0 4px 15px rgba(245, 87, 108, 0.4);
+    animation: badgePulse 2s ease-in-out infinite;
+    vertical-align: middle;
+}
+
+@keyframes badgePulse {
+    0%, 100% {
+        box-shadow: 0 4px 15px rgba(245, 87, 108, 0.4);
+    }
+    50% {
+        box-shadow: 0 4px 25px rgba(245, 87, 108, 0.7);
+    }
+}

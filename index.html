@@ -33,6 +33,14 @@
                     <h3>Choose Your Intensity Level</h3>
                     <div class="intensity-options">
                         <label class="intensity-option">
+                            <input type="radio" name="intensity" value="random">
+                            <div class="intensity-card">
+                                <span class="intensity-icon">🎲</span>
+                                <span class="intensity-name">Random</span>
+                                <span class="intensity-desc">Surprise Me!</span>
+                            </div>
+                        </label>
+                        <label class="intensity-option">
                             <input type="radio" name="intensity" value="sweet">
                             <div class="intensity-card">
                                 <span class="intensity-icon">🌸</span>
@@ -107,6 +115,18 @@
             <div class="choice-container">
                 <h2 class="screen-title">Choose Your Path</h2>
                 <div id="current-player" class="current-player"></div>
+
+                <!-- Intensity Switcher -->
+                <div class="intensity-switcher">
+                    <label>Intensity:</label>
+                    <div class="intensity-buttons">
+                        <button class="intensity-btn" data-intensity="random">🎲 Random</button>
+                        <button class="intensity-btn" data-intensity="sweet">🌸 Sweet</button>
+                        <button class="intensity-btn" data-intensity="romantic">❤️ Romantic</button>
+                        <button class="intensity-btn" data-intensity="passionate">🔥 Passionate</button>
+                        <button class="intensity-btn" data-intensity="explicit">💋 Explicit</button>
+                    </div>
+                </div>
 
                 <div id="scores" class="scores"></div>
 

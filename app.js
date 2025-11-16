@@ -4,7 +4,8 @@ const gameState = {
     partner2: '',
     apiKey: '',
     provider: 'google', // 'google', 'anthropic', or 'openai'
-    intensityLevel: 'romantic', // 'sweet', 'romantic', 'passionate', 'explicit'
+    intensityPreference: 'romantic', // 'random', 'sweet', 'romantic', 'passionate', 'explicit'
+    intensityLevel: 'romantic', // Current actual intensity (resolved from preference)
     currentPlayer: null,
     scores: {
         partner1: { truths: 0, dares: 0 },
@@ -55,10 +56,31 @@ document.querySelectorAll('input[name="ai-provider"]').forEach(radio => {
     });
 });
 
-// Intensity level listeners
+// Intensity level listeners (setup screen)
 document.querySelectorAll('input[name="intensity"]').forEach(radio => {
     radio.addEventListener('change', (e) => {
-        gameState.intensityLevel = e.target.value;
+        gameState.intensityPreference = e.target.value;
+        // If random is selected, default to romantic until first resolution
+        if (e.target.value === 'random') {
+            gameState.intensityLevel = 'romantic';
+        } else {
+            gameState.intensityLevel = e.target.value;
+        }
+    });
+});
+
+// Intensity switcher listeners (during gameplay)
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.intensity-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const intensity = btn.getAttribute('data-intensity');
+            gameState.intensityPreference = intensity;
+            // If random is selected, keep current level until next resolution
+            if (intensity !== 'random') {
+                gameState.intensityLevel = intensity;
+            }
+            updateIntensitySwitcher();
+        });
     });
 });
 
@@ -126,11 +148,35 @@ function selectRandomPlayer() {
             // Move to choice screen after delay
             setTimeout(() => {
                 switchScreen(selectionScreen, choiceScreen);
-                currentPlayerDiv.textContent = `${gameState.currentPlayer}'s Turn`;
+
+                // Resolve intensity for this round if random mode
+                if (gameState.intensityPreference === 'random') {
+                    resolveIntensity();
+                }
+
+                // Update player display with intensity info if random
+                updateCurrentPlayerDisplay();
                 updateScoreDisplay();
             }, 2000);
         }
     }, 100);
+}
+
+function updateCurrentPlayerDisplay() {
+    // Show current player with intensity info if in random mode
+    if (gameState.intensityPreference === 'random') {
+        const intensityEmojis = {
+            'sweet': '🌸',
+            'romantic': '❤️',
+            'passionate': '🔥',
+            'explicit': '💋'
+        };
+        const emoji = intensityEmojis[gameState.intensityLevel] || '🎲';
+        const intensityName = gameState.intensityLevel.charAt(0).toUpperCase() + gameState.intensityLevel.slice(1);
+        currentPlayerDiv.innerHTML = `${gameState.currentPlayer}'s Turn <span class="intensity-badge">${emoji} ${intensityName}</span>`;
+    } else {
+        currentPlayerDiv.textContent = `${gameState.currentPlayer}'s Turn`;
+    }
 }
 
 function updateScoreDisplay() {
@@ -147,6 +193,35 @@ function updateScoreDisplay() {
             <div class="score-stats">Truths: ${p2Scores.truths} | Dares: ${p2Scores.dares}</div>
         </div>
     `;
+
+    // Update intensity switcher to show current setting
+    updateIntensitySwitcher();
+}
+
+function updateIntensitySwitcher() {
+    // Update the visual state of intensity buttons
+    document.querySelectorAll('.intensity-btn').forEach(btn => {
+        if (btn.getAttribute('data-intensity') === gameState.intensityPreference) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    });
+}
+
+function resolveIntensity() {
+    // If random mode, pick a random intensity for this round
+    if (gameState.intensityPreference === 'random') {
+        const intensities = ['sweet', 'romantic', 'passionate', 'explicit'];
+        // Weighted random: 25% sweet, 30% romantic, 30% passionate, 15% explicit
+        const rand = Math.random();
+        if (rand < 0.25) gameState.intensityLevel = 'sweet';
+        else if (rand < 0.55) gameState.intensityLevel = 'romantic';
+        else if (rand < 0.85) gameState.intensityLevel = 'passionate';
+        else gameState.intensityLevel = 'explicit';
+    } else {
+        gameState.intensityLevel = gameState.intensityPreference;
+    }
 }
 
 function getIntensityGuidance() {
@@ -186,6 +261,9 @@ function getIntensityGuidance() {
 
 async function handleChoice(choice) {
     switchScreen(choiceScreen, promptScreen);
+
+    // Intensity is already resolved when showing the choice screen
+    // Just display it
     promptPlayer.textContent = `${gameState.currentPlayer}'s ${choice === 'truth' ? 'Truth' : 'Dare'}`;
     promptLoading.style.display = 'block';
     promptDisplay.innerHTML = '';

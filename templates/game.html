@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>Couples Game - Truth or Dare</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        @media (max-width: 768px) {
+            body { overflow-x: hidden; }
+            .game-container { padding: 10px; min-height: 100vh; }
+            .setup-panel, .spotlight-container, .choice-container, .prompt-container { padding: 20px; }
+            .title-main { font-size: 2.2em !important; }
+            .subtitle, .game-type { font-size: 1em !important; }
+            .screen-title { font-size: 1.8em !important; }
+            .partner-inputs { flex-direction: column; }
+            .btn { padding: 12px 20px; font-size: 1em; }
+            input.input-field { font-size: 16px !important; }
+            .intensity-options { grid-template-columns: repeat(2, 1fr); }
+            .intensity-buttons { flex-wrap: wrap; }
+            .intensity-btn { flex: 1 1 45%; min-width: 100px; font-size: 0.85em; padding: 8px; }
+            .choice-buttons { flex-direction: column; }
+            .choice-btn { width: 100%; margin: 10px 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <!-- Setup Screen -->
+        <div id="setup-screen" class="screen active">
+            <div class="game-logo">
+                <h1 class="title-main">💕 COUPLES GAME 💕</h1>
+                <p class="subtitle">Deepen your connection</p>
+                <p class="game-type">Truth or Dare for Two</p>
+            </div>
+
+            <div class="setup-panel">
+                <h2>Enter Your Names</h2>
+                <div class="partner-inputs">
+                    <div class="input-group">
+                        <label for="partner1-name">Partner 1</label>
+                        <input type="text" id="partner1-name" placeholder="First partner's name" class="input-field">
+                    </div>
+                    <div class="input-group">
+                        <label for="partner2-name">Partner 2</label>
+                        <input type="text" id="partner2-name" placeholder="Second partner's name" class="input-field">
+                    </div>
+                </div>
+
+                <div class="intensity-selection">
+                    <h3>Choose Your Intensity Level</h3>
+                    <div class="intensity-options">
+                        <label class="intensity-option">
+                            <input type="radio" name="intensity" value="random">
+                            <div class="intensity-card">
+                                <span class="intensity-icon">🎲</span>
+                                <span class="intensity-name">Random</span>
+                                <span class="intensity-desc">Surprise Me!</span>
+                            </div>
+                        </label>
+                        <label class="intensity-option">
+                            <input type="radio" name="intensity" value="sweet">
+                            <div class="intensity-card">
+                                <span class="intensity-icon">🌸</span>
+                                <span class="intensity-name">Sweet</span>
+                                <span class="intensity-desc">Innocent & PG-13</span>
+                            </div>
+                        </label>
+                        <label class="intensity-option">
+                            <input type="radio" name="intensity" value="romantic" checked>
+                            <div class="intensity-card">
+                                <span class="intensity-icon">❤️</span>
+                                <span class="intensity-name">Romantic</span>
+                                <span class="intensity-desc">Affectionate & Tender</span>
+                            </div>
+                        </label>
+                        <label class="intensity-option">
+                            <input type="radio" name="intensity" value="passionate">
+                            <div class="intensity-card">
+                                <span class="intensity-icon">🔥</span>
+                                <span class="intensity-name">Passionate</span>
+                                <span class="intensity-desc">Steamy & Sensual</span>
+                            </div>
+                        </label>
+                        <label class="intensity-option">
+                            <input type="radio" name="intensity" value="explicit">
+                            <div class="intensity-card">
+                                <span class="intensity-icon">💋</span>
+                                <span class="intensity-name">Explicit</span>
+                                <span class="intensity-desc">Unrestricted & Bold</span>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="api-setup">
+                    <h3>AI Model Selection</h3>
+                    <div class="model-selection">
+                        <label class="model-option">
+                            <input type="radio" name="ai-provider" value="google" checked>
+                            <span class="model-name">Google Gemini</span>
+                        </label>
+                        <label class="model-option">
+                            <input type="radio" name="ai-provider" value="anthropic">
+                            <span class="model-name">Anthropic Claude</span>
+                        </label>
+                        <label class="model-option">
+                            <input type="radio" name="ai-provider" value="openai">
+                            <span class="model-name">OpenAI GPT</span>
+                        </label>
+                    </div>
+                    <input type="password" id="api-key" placeholder="API Key" class="input-field" style="display: none;">
+                </div>
+
+                <button id="start-game-btn" class="btn btn-success" disabled>Start Game!</button>
+                <a href="/logout" style="display: block; text-align: center; margin-top: 15px; color: #666;">Logout</a>
+            </div>
+        </div>
+
+        <!-- Player Selection Screen -->
+        <div id="selection-screen" class="screen">
+            <div class="spotlight-container">
+                <h2 class="screen-title">WHO'S NEXT?</h2>
+                <div id="name-spinner" class="name-spinner"></div>
+                <div id="selected-player" class="selected-player"></div>
+            </div>
+        </div>
+
+        <!-- Truth or Dare Choice Screen -->
+        <div id="choice-screen" class="screen">
+            <div class="choice-container">
+                <h2 class="screen-title">Choose Your Path</h2>
+                <div id="current-player" class="current-player"></div>
+
+                <!-- Intensity Switcher -->
+                <div class="intensity-switcher">
+                    <label>Intensity:</label>
+                    <div class="intensity-buttons">
+                        <button class="intensity-btn" data-intensity="random">🎲 Random</button>
+                        <button class="intensity-btn" data-intensity="sweet">🌸 Sweet</button>
+                        <button class="intensity-btn" data-intensity="romantic">❤️ Romantic</button>
+                        <button class="intensity-btn" data-intensity="passionate">🔥 Passionate</button>
+                        <button class="intensity-btn" data-intensity="explicit">💋 Explicit</button>
+                    </div>
+                </div>
+
+                <div id="scores" class="scores"></div>
+
+                <div class="choice-buttons">
+                    <button id="truth-btn" class="choice-btn truth-btn">
+                        <div class="choice-icon">💭</div>
+                        <div class="choice-title">TRUTH</div>
+                        <div class="choice-subtitle">Answer honestly</div>
+                    </button>
+                    <button id="dare-btn" class="choice-btn dare-btn">
+                        <div class="choice-icon">⚡</div>
+                        <div class="choice-title">DARE</div>
+                        <div class="choice-subtitle">Do something now</div>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Prompt Display Screen -->
+        <div id="prompt-screen" class="screen">
+            <div class="prompt-container">
+                <h2 class="screen-title">Your Challenge</h2>
+                <div id="prompt-player" class="current-player"></div>
+
+                <div id="prompt-loading" class="loading">
+                    <div class="spinner"></div>
+                    <p>Creating your challenge...</p>
+                </div>
+
+                <div id="prompt-display" class="prompt-display"></div>
+
+                <div class="action-buttons">
+                    <button id="skip-dare-btn" class="btn btn-secondary" style="display: none;">Skip & Get New Dare</button>
+                    <button id="next-round-btn" class="btn btn-success">Done - Next Round</button>
+                    <button id="end-game-btn" class="btn btn-danger">End Game</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const PRELOADED_API_KEYS = {
+            google: "{{ google_api_key }}",
+            anthropic: "{{ anthropic_api_key }}",
+            openai: "{{ openai_api_key }}"
+        };
+    </script>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script src="{{ url_for('static', filename='app-loader.js') }}"></script>
+</body>
+</html>

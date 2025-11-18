@@ -14,6 +14,149 @@ const gameState = {
     lastPlayer: null
 };
 
+// Question Pool Management
+const POOL_SIZE = 10;
+
+function getPoolKey(intensity, type) {
+    return `couples_pool_${intensity}_${type}`;
+}
+
+function getUsedQuestionsKey() {
+    return 'couples_used_questions_session';
+}
+
+function getQuestionPool(intensity, type) {
+    const key = getPoolKey(intensity, type);
+    const pool = localStorage.getItem(key);
+    return pool ? JSON.parse(pool) : [];
+}
+
+function saveQuestionPool(intensity, type, questions) {
+    const key = getPoolKey(intensity, type);
+    localStorage.setItem(key, JSON.stringify(questions));
+}
+
+function getUsedQuestions() {
+    const used = sessionStorage.getItem(getUsedQuestionsKey());
+    return used ? JSON.parse(used) : [];
+}
+
+function addUsedQuestion(question) {
+    const used = getUsedQuestions();
+    used.push(question);
+    sessionStorage.setItem(getUsedQuestionsKey(), JSON.stringify(used));
+}
+
+function popQuestionFromPool(intensity, type) {
+    const pool = getQuestionPool(intensity, type);
+    if (pool.length === 0) return null;
+
+    const question = pool.shift(); // Take first question
+    saveQuestionPool(intensity, type, pool);
+    return question;
+}
+
+async function generateQuestionPool(intensity, type) {
+    const guidance = getIntensityGuidance(intensity);
+    const usedQuestions = getUsedQuestions();
+    const otherPartner = gameState.currentPlayer === gameState.partner1 ? gameState.partner2 : gameState.partner1;
+
+    let usedQuestionsText = '';
+    if (usedQuestions.length > 0) {
+        usedQuestionsText = `\n\nPREVIOUSLY USED QUESTIONS (DO NOT REPEAT THESE):\n${usedQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}`;
+    }
+
+    let prompt;
+    if (type === 'truth') {
+        prompt = `Generate EXACTLY ${POOL_SIZE} unique truth questions for a couples truth or dare game.
+
+Current Player: ${gameState.currentPlayer}
+Partner: ${otherPartner}
+Intensity Level: ${intensity.toUpperCase()} - ${guidance.description}
+
+INTENSITY GUIDELINES:
+${guidance.truthTone}
+
+Example questions at this level:
+${guidance.truthExamples}
+
+Requirements:
+- Generate EXACTLY ${POOL_SIZE} different questions
+- Make them PERSONAL and SPECIFIC to their relationship
+- Use both partner names naturally in the questions when appropriate
+- Make them REVEALING and thought-provoking
+- Keep ALL questions at ${intensity} intensity level
+- Should create intimacy and connection
+- Be direct and clear
+- Each question must be DIFFERENT from each other${usedQuestionsText}
+
+Return ONLY a JSON array of ${POOL_SIZE} questions. Format: ["question 1", "question 2", ...]
+No markdown, no extra text, just the JSON array.`;
+    } else {
+        prompt = `Generate EXACTLY ${POOL_SIZE} unique dares for a couples truth or dare game.
+
+Current Player: ${gameState.currentPlayer}
+Partner: ${otherPartner}
+Intensity Level: ${intensity.toUpperCase()} - ${guidance.description}
+
+INTENSITY GUIDELINES:
+${guidance.dareTone}
+
+Example dares at this level:
+${guidance.dareExamples}
+
+Requirements:
+- Generate EXACTLY ${POOL_SIZE} different dares
+- Must be DOABLE RIGHT NOW in the moment
+- Should involve BOTH partners physically or emotionally
+- Keep ALL dares at ${intensity} intensity level
+- Be SPECIFIC about what to do
+- Include a time duration if relevant (e.g., "for 2 minutes")
+- Should create intimacy and connection
+- Be direct and clear
+- Each dare must be DIFFERENT from each other${usedQuestionsText}
+
+Return ONLY a JSON array of ${POOL_SIZE} dares. Format: ["dare 1", "dare 2", ...]
+No markdown, no extra text, just the JSON array.`;
+    }
+
+    try {
+        const result = await callAIAPI(prompt, true);
+
+        // Parse the JSON array
+        let questions;
+        try {
+            // Clean up the response - remove markdown if present
+            const cleanedResult = result.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+            questions = JSON.parse(cleanedResult);
+
+            if (!Array.isArray(questions)) {
+                throw new Error('Response is not an array');
+            }
+
+            // Ensure we have exactly POOL_SIZE questions
+            if (questions.length < POOL_SIZE) {
+                console.warn(`Generated only ${questions.length} questions instead of ${POOL_SIZE}`);
+            }
+
+            // Take only the first POOL_SIZE questions
+            questions = questions.slice(0, POOL_SIZE);
+
+        } catch (parseError) {
+            console.error('Failed to parse questions array:', result);
+            throw new Error('Invalid response format from AI');
+        }
+
+        // Save to localStorage
+        saveQuestionPool(intensity, type, questions);
+
+        return questions;
+    } catch (error) {
+        console.error('Error generating question pool:', error);
+        throw error;
+    }
+}
+
 // DOM Elements
 const setupScreen = document.getElementById('setup-screen');
 const selectionScreen = document.getElementById('selection-screen');
@@ -224,7 +367,9 @@ function resolveIntensity() {
     }
 }
 
-function getIntensityGuidance() {
+function getIntensityGuidance(intensityLevel = null) {
+    const level = intensityLevel || gameState.intensityLevel;
+
     const guidance = {
         'sweet': {
             description: 'Sweet and innocent - romantic but PG-13',
@@ -256,7 +401,7 @@ function getIntensityGuidance() {
         }
     };
 
-    return guidance[gameState.intensityLevel];
+    return guidance[level];
 }
 
 async function handleChoice(choice) {
@@ -280,63 +425,27 @@ async function handleChoice(choice) {
     }
 
     try {
-        const guidance = getIntensityGuidance();
-        const otherPartner = gameState.currentPlayer === gameState.partner1 ? gameState.partner2 : gameState.partner1;
+        // Try to get a question from the pool
+        let question = popQuestionFromPool(gameState.intensityLevel, choice);
 
-        let prompt;
-        if (choice === 'truth') {
-            prompt = `Generate ONE truth question for a couples truth or dare game.
-
-Current Player: ${gameState.currentPlayer}
-Partner: ${otherPartner}
-Intensity Level: ${gameState.intensityLevel.toUpperCase()} - ${guidance.description}
-
-INTENSITY GUIDELINES:
-${guidance.truthTone}
-
-Example questions at this level:
-${guidance.truthExamples}
-
-Requirements:
-- Make it PERSONAL and SPECIFIC to their relationship
-- Use both partner names naturally in the question when appropriate
-- Make it REVEALING and thought-provoking
-- Keep it at ${gameState.intensityLevel} intensity level
-- Should create intimacy and connection
-- Be direct and clear
-
-Return ONLY the question. No quotes, no extra words.`;
-        } else {
-            prompt = `Generate ONE dare for a couples truth or dare game.
-
-Current Player: ${gameState.currentPlayer}
-Partner: ${otherPartner}
-Intensity Level: ${gameState.intensityLevel.toUpperCase()} - ${guidance.description}
-
-INTENSITY GUIDELINES:
-${guidance.dareTone}
-
-Example dares at this level:
-${guidance.dareExamples}
-
-Requirements:
-- Must be DOABLE RIGHT NOW in the moment
-- Should involve BOTH partners physically or emotionally
-- Keep it at ${gameState.intensityLevel} intensity level
-- Be SPECIFIC about what to do
-- Include a time duration if relevant (e.g., "for 2 minutes")
-- Should create intimacy and connection
-- Be direct and clear
-
-Return ONLY the dare instruction. No quotes, no extra words.`;
+        // If pool is empty, generate a new pool
+        if (!question) {
+            promptLoading.innerHTML = '<p>Generating fresh questions...</p>';
+            await generateQuestionPool(gameState.intensityLevel, choice);
+            question = popQuestionFromPool(gameState.intensityLevel, choice);
         }
 
-        const result = await callAIAPI(prompt, true);
+        if (!question) {
+            throw new Error('Failed to generate questions');
+        }
+
+        // Add to used questions
+        addUsedQuestion(question);
 
         promptLoading.style.display = 'none';
 
         // Format the prompt nicely
-        const formattedPrompt = result.trim().replace(/^["']|["']$/g, '');
+        const formattedPrompt = question.trim().replace(/^["']|["']$/g, '');
 
         const icon = choice === 'truth' ? '💭' : '⚡';
         const title = choice === 'truth' ? 'Truth Question' : 'Dare Challenge';
@@ -355,43 +464,31 @@ Return ONLY the dare instruction. No quotes, no extra words.`;
 }
 
 async function skipDare() {
-    // Regenerate a new dare
+    // Get a new dare from the pool
     promptLoading.style.display = 'block';
     promptDisplay.innerHTML = '';
 
     try {
-        const guidance = getIntensityGuidance();
-        const otherPartner = gameState.currentPlayer === gameState.partner1 ? gameState.partner2 : gameState.partner1;
+        // Try to get a dare from the pool
+        let question = popQuestionFromPool(gameState.intensityLevel, 'dare');
 
-        const prompt = `Generate ONE dare for a couples truth or dare game.
+        // If pool is empty, generate a new pool
+        if (!question) {
+            promptLoading.innerHTML = '<p>Generating fresh dares...</p>';
+            await generateQuestionPool(gameState.intensityLevel, 'dare');
+            question = popQuestionFromPool(gameState.intensityLevel, 'dare');
+        }
 
-Current Player: ${gameState.currentPlayer}
-Partner: ${otherPartner}
-Intensity Level: ${gameState.intensityLevel.toUpperCase()} - ${guidance.description}
+        if (!question) {
+            throw new Error('Failed to generate dares');
+        }
 
-INTENSITY GUIDELINES:
-${guidance.dareTone}
-
-Example dares at this level:
-${guidance.dareExamples}
-
-Requirements:
-- Must be DOABLE RIGHT NOW in the moment
-- Should involve BOTH partners physically or emotionally
-- Keep it at ${gameState.intensityLevel} intensity level
-- Be SPECIFIC about what to do
-- Include a time duration if relevant (e.g., "for 2 minutes")
-- Should create intimacy and connection
-- Be direct and clear
-- Make it DIFFERENT from typical dares - be creative!
-
-Return ONLY the dare instruction. No quotes, no extra words.`;
-
-        const result = await callAIAPI(prompt, true);
+        // Add to used questions
+        addUsedQuestion(question);
 
         promptLoading.style.display = 'none';
 
-        const formattedPrompt = result.trim().replace(/^["']|["']$/g, '');
+        const formattedPrompt = question.trim().replace(/^["']|["']$/g, '');
 
         promptDisplay.innerHTML = `
             <div class="prompt-icon">⚡</div>

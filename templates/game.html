@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -28,23 +29,75 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <style>
         @media (max-width: 768px) {
-            body { overflow-x: hidden; }
-            .game-container { padding: 10px; min-height: 100vh; }
-            .setup-panel, .spotlight-container, .choice-container, .prompt-container { padding: 20px; }
-            .title-main { font-size: 2.2em !important; }
-            .subtitle, .game-type { font-size: 1em !important; }
-            .screen-title { font-size: 1.8em !important; }
-            .partner-inputs { flex-direction: column; }
-            .btn { padding: 12px 20px; font-size: 1em; }
-            input.input-field { font-size: 16px !important; }
-            .intensity-options { grid-template-columns: repeat(2, 1fr); }
-            .intensity-buttons { flex-wrap: wrap; }
-            .intensity-btn { flex: 1 1 45%; min-width: 100px; font-size: 0.85em; padding: 8px; }
-            .choice-buttons { flex-direction: column; }
-            .choice-btn { width: 100%; margin: 10px 0; }
+            body {
+                overflow-x: hidden;
+            }
+
+            .game-container {
+                padding: 10px;
+                min-height: 100vh;
+            }
+
+            .setup-panel,
+            .spotlight-container,
+            .choice-container,
+            .prompt-container {
+                padding: 20px;
+            }
+
+            .title-main {
+                font-size: 2.2em !important;
+            }
+
+            .subtitle,
+            .game-type {
+                font-size: 1em !important;
+            }
+
+            .screen-title {
+                font-size: 1.8em !important;
+            }
+
+            .partner-inputs {
+                flex-direction: column;
+            }
+
+            .btn {
+                padding: 12px 20px;
+                font-size: 1em;
+            }
+
+            input.input-field {
+                font-size: 16px !important;
+            }
+
+            .intensity-options {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .intensity-buttons {
+                flex-wrap: wrap;
+            }
+
+            .intensity-btn {
+                flex: 1 1 45%;
+                min-width: 100px;
+                font-size: 0.85em;
+                padding: 8px;
+            }
+
+            .choice-buttons {
+                flex-direction: column;
+            }
+
+            .choice-btn {
+                width: 100%;
+                margin: 10px 0;
+            }
         }
     </style>
 </head>
+
 <body>
     <div class="game-container">
         <!-- Setup Screen -->
@@ -64,7 +117,7 @@
                     </div>
                     <div class="input-group">
                         <label for="partner2-name">Partner 2</label>
-                        <input type="text" id="partner2-name" placeholder="Second partner's name" class="input-field">
+                        <input type="text" id="partner2" placeholder="Second partner's name" class="input-field">
                     </div>
                 </div>
 
@@ -114,26 +167,7 @@
                     </div>
                 </div>
 
-                <div class="api-setup">
-                    <h3>AI Model Selection</h3>
-                    <div class="model-selection">
-                        <label class="model-option">
-                            <input type="radio" name="ai-provider" value="google" checked>
-                            <span class="model-name">Google Gemini</span>
-                        </label>
-                        <label class="model-option">
-                            <input type="radio" name="ai-provider" value="anthropic">
-                            <span class="model-name">Anthropic Claude</span>
-                        </label>
-                        <label class="model-option">
-                            <input type="radio" name="ai-provider" value="openai">
-                            <span class="model-name">OpenAI GPT</span>
-                        </label>
-                    </div>
-                    <input type="password" id="api-key" placeholder="API Key" class="input-field" style="display: none;">
-                </div>
-
-                <button id="start-game-btn" class="btn btn-success" disabled>Start Game!</button>
+                <button id="start-game-btn" class="btn btn-success">Start Game!</button>
                 <a href="/logout" style="display: block; text-align: center; margin-top: 15px; color: #666;">Logout</a>
             </div>
         </div>
@@ -196,7 +230,8 @@
                 <div id="prompt-display" class="prompt-display"></div>
 
                 <div class="action-buttons">
-                    <button id="skip-dare-btn" class="btn btn-secondary" style="display: none;">Skip & Get New Dare</button>
+                    <button id="skip-dare-btn" class="btn btn-secondary" style="display: none;">Skip & Get New
+                        Dare</button>
                     <button id="next-round-btn" class="btn btn-success">Done - Next Round</button>
                     <button id="end-game-btn" class="btn btn-danger">End Game</button>
                 </div>
@@ -204,14 +239,21 @@
         </div>
     </div>
 
-    <script>
-        const PRELOADED_API_KEYS = {
-            google: "{{ google_api_key }}",
-            anthropic: "{{ anthropic_api_key }}",
-            openai: "{{ openai_api_key }}"
-        };
-    </script>
+    <!-- Custom Modal Overlay -->
+    <div id="modal-overlay" class="modal-overlay">
+        <div class="modal-container">
+            <h3 id="modal-title" class="modal-title">Title</h3>
+            <div id="modal-body" class="modal-body">
+                Content goes here...
+            </div>
+            <div id="modal-actions" class="modal-actions">
+                <!-- Buttons will be injected here -->
+            </div>
+        </div>
+    </div>
+
     <script src="{{ url_for('static', filename='app.js') }}"></script>
     <script src="{{ url_for('static', filename='app-loader.js') }}"></script>
 </body>
+
 </html>

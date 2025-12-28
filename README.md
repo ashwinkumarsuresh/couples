@@ -12,8 +12,8 @@ A romantic Truth or Dare game that uses AI to generate personalized prompts for 
 - **🌡️ 4 Intensity Levels** - From sweet to explicit, choose your comfort level
 - **📊 Score Tracking** - See who's braver and who's more open
 - **🔄 Skip Dares** - Don't like a dare? Get a new one!
-- **🤖 AI-Powered** - Every prompt is unique and personalized
-- **🔐 Private & Secure** - Everything runs locally on your computer
+- **🤖 AI-Powered** - Every prompt is unique and personalized via Google Gemini
+- **🔐 Secure** - API keys are managed server-side via Google Secret Manager
 - **💕 Romantic Design** - Beautiful pink/red gradient aesthetic
 
 ## 🌡️ Intensity Levels
@@ -41,43 +41,41 @@ A romantic Truth or Dare game that uses AI to generate personalized prompts for 
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Python 3.x installed
-- Modern web browser (Chrome, Firefox, Safari, Edge)
-- API key from one of the supported providers:
-  - [Google AI Studio](https://aistudio.google.com/app/apikey) (Free)
-  - [OpenAI Platform](https://platform.openai.com/api-keys) (Paid)
-  - [Anthropic Console](https://console.anthropic.com/) (Paid)
+- Python 3.12+ installed
+- Modern web browser
+- Google Cloud Project with Secret Manager enabled
 
-### Installation
+### Local Setup
 
-1. **Navigate to the couples directory:**
+1. **Install dependencies:**
    ```bash
-   cd /Users/ashwin/Documents/Code/Game/couples/
+   pip install -r requirements.txt
    ```
 
-2. **Start the server:**
+2. **Configure Environment:**
+   Create a `.env` file or set environment variables:
+   ```env
+   GOOGLE_API_KEY=your_gemini_api_key_here
+   COUPLES_PASSWORD=your_app_password
+   ```
+   *Note: In production/GCP, the app will automatically look for a secret named `GOOGLE_AI_STUDIO_API_KEY`.*
+
+3. **Start the server:**
    ```bash
-   python3 proxy-server.py
+   python3 server.py
    ```
 
-3. **Open your browser:**
-   - Go to: `http://localhost:3003`
-
-4. **Start playing:**
-   - Enter both partner names
-   - Choose your intensity level
-   - Select AI provider and enter API key
-   - Click "Start Game!"
+4. **Open your browser:**
+   - Go to: `http://localhost:8080` (or `http://localhost:3003` if using `proxy-server.py`)
 
 ## 🎮 How to Play
 
 ### Setup Phase
-1. Enter Partner 1's name
-2. Enter Partner 2's name
-3. Choose intensity level (🌸 Sweet, ❤️ Romantic, 🔥 Passionate, 💋 Explicit)
-4. Select AI provider (Google Gemini, Anthropic Claude, or OpenAI GPT)
-5. Enter your API key
-6. Click "Start Game!"
+1. Log in with your password
+2. Enter Partner 1's name
+3. Enter Partner 2's name
+4. Choose intensity level
+5. Click "Start Game!"
 
 ### Gameplay Loop
 1. **Player Selection** - Random spinner selects who goes first
@@ -97,37 +95,25 @@ A romantic Truth or Dare game that uses AI to generate personalized prompts for 
 
 ### Environment Variables
 
-Create a `.env` file to customize AI models:
-
 ```env
 # AI Model Configuration
-GOOGLE_MODEL=gemini-2.0-flash
-ANTHROPIC_MODEL=claude-sonnet-4-20250514
-OPENAI_MODEL=gpt-4o-mini
+GOOGLE_MODEL=gemini-3-flash-preview
+GOOGLE_CLOUD_PROJECT=your-project-id
 ```
 
 ### Supported Models
 
-**Google Gemini:**
-- `gemini-2.0-flash` (default, recommended)
+The app is optimized for **Google Gemini**:
+- `gemini-3-flash-preview` (default, recommended)
+- `gemini-2.0-flash`
 - `gemini-1.5-pro`
-- `gemini-1.5-flash`
-
-**Anthropic Claude:**
-- `claude-sonnet-4-20250514` (default, recommended)
-- `claude-3-5-sonnet-20241022`
-- `claude-3-opus-20240229`
-
-**OpenAI:**
-- `gpt-4o-mini` (default, recommended)
-- `gpt-4o`
-- `gpt-4-turbo`
 
 ## 🔐 Privacy & Security
 
-- **Local Processing:** All game data stays on your computer
+- **Server-Side API Keys:** No more entering API keys in the browser. 
+- **Secret Manager:** Integration with Google Cloud Secret Manager for secure key handling.
+- **Local Processing:** Prompt generation happens via the official Gemini SDK.
 - **No Storage:** Nothing is saved or logged
-- **API Keys:** Stored only in browser memory, cleared on refresh
 - **Private:** Your truths and dares are never sent anywhere except to the AI provider for generation
 
 ## 💡 Tips for Best Experience

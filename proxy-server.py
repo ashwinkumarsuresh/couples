@@ -11,6 +11,10 @@ import urllib.error
 import os
 from pathlib import Path
 
+import google.generativeai as genai
+
+from google.cloud import secretmanager
+
 # Try to load python-dotenv
 try:
     from dotenv import load_dotenv
@@ -20,15 +24,34 @@ except ImportError:
     print("Install with: pip3 install python-dotenv")
 
 PORT = 3003  # Using port 3003 to avoid conflicts
+PROJECT_ID = os.environ.get('GOOGLE_CLOUD_PROJECT', 'ashwinstock')
 
 class ProxyHandler(BaseHTTPRequestHandler):
+    def _get_gemini_api_key(self):
+        """Fetch Gemini API key from Secret Manager or environment variable."""
+        env_key = os.environ.get('GOOGLE_API_KEY')
+        if env_key:
+            return env_key
+        
+        try:
+            client = secretmanager.SecretManagerServiceClient()
+            name = f"projects/{PROJECT_ID}/secrets/GOOGLE_AI_STUDIO_API_KEY/versions/latest"
+            response = client.access_secret_version(request={"name": name})
+            return response.payload.data.decode("UTF-8").strip()
+        except Exception as e:
+            self.log_message(f"Error fetching secret GOOGLE_AI_STUDIO_API_KEY: {str(e)}")
+            return None
+
     def do_GET(self):
         """Serve static files"""
-        if self.path == '/':
-            self.path = '/index.html'
+        # Strip query parameters from path (e.g., ?v=2 for cache busting)
+        path = self.path.split('?')[0]
+        
+        if path == '/':
+            path = '/index.html'
 
         try:
-            file_path = Path(__file__).parent / self.path.lstrip('/')
+            file_path = Path(__file__).parent / path.lstrip('/')
 
             if file_path.is_file():
                 # Determine content type
@@ -54,35 +77,29 @@ class ProxyHandler(BaseHTTPRequestHandler):
             self.send_error(500, str(e))
 
     def do_POST(self):
-        """Proxy API requests to AI providers"""
+        """Proxy API requests to Gemini"""
         if self.path == '/api/generate':
             content_length = int(self.headers['Content-Length'])
             post_data = self.rfile.read(content_length)
             request_data = json.loads(post_data.decode('utf-8'))
 
-            # Extract API key and request data
-            api_key = request_data.get('apiKey')
+            # Extract request data
             prompt = request_data.get('prompt')
             is_text = request_data.get('isTextResponse', False)
-            provider = request_data.get('provider', 'google')  # 'google', 'anthropic', or 'openai'
 
-            if not api_key or not prompt:
-                self.send_error(400, 'Missing API key or prompt')
+            if not prompt:
+                self.send_error(400, 'Missing prompt')
+                return
+
+            api_key = self._get_gemini_api_key()
+            if not api_key:
+                self.send_error(500, 'Gemini API key not configured on server')
                 return
 
             try:
-                if provider == 'google':
-                    # Get model name from environment or use default
-                    model = os.getenv('GOOGLE_MODEL', 'gemini-2.0-flash')
-                    content = self._call_google_api(api_key, prompt, model)
-                elif provider == 'openai':
-                    # Get model name from environment or use default
-                    model = os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
-                    content = self._call_openai_api(api_key, prompt, model)
-                else:
-                    # Anthropic Claude API
-                    model = os.getenv('ANTHROPIC_MODEL', 'claude-sonnet-4-20250514')
-                    content = self._call_anthropic_api(api_key, prompt, model)
+                # Get model name from environment or use default
+                model_name = os.getenv('GOOGLE_MODEL', 'gemini-3-flash-preview')
+                content = self._call_google_api(api_key, prompt, model_name)
 
                 # Send success response
                 self.send_response(200)
@@ -99,16 +116,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
             except Exception as e:
                 error_msg = str(e)
-                status_code = 500
-
-                # Extract status code if it's an HTTP error
-                if 'HTTP Error' in error_msg:
-                    try:
-                        status_code = int(error_msg.split('HTTP Error ')[1].split(':')[0])
-                    except:
-                        pass
-
-                self.send_response(status_code)
+                self.send_response(500)
                 self.send_header('Content-type', 'application/json')
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.end_headers()
@@ -121,119 +129,24 @@ class ProxyHandler(BaseHTTPRequestHandler):
         else:
             self.send_error(404)
 
-    def _call_anthropic_api(self, api_key, prompt, model='claude-sonnet-4-20250514'):
-        """Call Anthropic Claude API"""
-        anthropic_data = {
-            'model': model,
-            'max_tokens': 1024,
-            'messages': [{
-                'role': 'user',
-                'content': prompt
-            }]
-        }
-
-        headers = {
-            'Content-Type': 'application/json',
-            'x-api-key': api_key,
-            'anthropic-version': '2023-06-01'
-        }
-
-        req = urllib.request.Request(
-            'https://api.anthropic.com/v1/messages',
-            data=json.dumps(anthropic_data).encode('utf-8'),
-            headers=headers,
-            method='POST'
-        )
-
-        try:
-            with urllib.request.urlopen(req) as response:
-                response_data = json.loads(response.read().decode('utf-8'))
-                return response_data['content'][0]['text']
-        except urllib.error.HTTPError as e:
-            error_data = json.loads(e.read().decode('utf-8'))
-            raise Exception(error_data.get('error', {}).get('message', 'Anthropic API error'))
-
-    def _call_google_api(self, api_key, prompt, model='gemini-2.0-flash'):
-        """Call Google Gemini API"""
-        # Sanitize API key to remove control characters and validate
+    def _call_google_api(self, api_key, prompt, model_name='gemini-3-flash-preview'):
+        """Call Google Gemini API using SDK"""
         api_key = api_key.strip()
-
-        # Validate API key format (should start with AIza)
-        if not api_key or not api_key.startswith('AIza'):
-            raise Exception('Invalid Google API key format. Please check your API key.')
-
-        # Using v1beta API
-        url = f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}'
-
-        data = {
-            'contents': [{
-                'parts': [{
-                    'text': prompt
-                }]
-            }],
-            'generationConfig': {
-                'temperature': 0.9,
-                'maxOutputTokens': 1024,
-            }
-        }
-
-        headers = {
-            'Content-Type': 'application/json'
-        }
-
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(data).encode('utf-8'),
-            headers=headers,
-            method='POST'
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel(model_name)
+        
+        response = model.generate_content(
+            prompt,
+            generation_config=genai.types.GenerationConfig(
+                temperature=0.9,
+                max_output_tokens=8192,
+            )
         )
-
-        try:
-            with urllib.request.urlopen(req) as response:
-                response_data = json.loads(response.read().decode('utf-8'))
-                return response_data['candidates'][0]['content']['parts'][0]['text']
-        except urllib.error.HTTPError as e:
-            error_data = json.loads(e.read().decode('utf-8'))
-            error_msg = error_data.get('error', {}).get('message', 'Google API error')
-            raise Exception(error_msg)
-
-    def _call_openai_api(self, api_key, prompt, model='gpt-4o-mini'):
-        """Call OpenAI API"""
-        # Validate API key format
-        api_key = api_key.strip()
-        if not api_key or not api_key.startswith('sk-'):
-            raise Exception('Invalid OpenAI API key format. Please check your API key.')
-
-        openai_data = {
-            'model': model,
-            'messages': [{
-                'role': 'user',
-                'content': prompt
-            }],
-            'max_tokens': 1024,
-            'temperature': 0.9
-        }
-
-        headers = {
-            'Content-Type': 'application/json',
-            'Authorization': f'Bearer {api_key}'
-        }
-
-        req = urllib.request.Request(
-            'https://api.openai.com/v1/chat/completions',
-            data=json.dumps(openai_data).encode('utf-8'),
-            headers=headers,
-            method='POST'
-        )
-
-        try:
-            with urllib.request.urlopen(req) as response:
-                response_data = json.loads(response.read().decode('utf-8'))
-                return response_data['choices'][0]['message']['content']
-        except urllib.error.HTTPError as e:
-            error_data = json.loads(e.read().decode('utf-8'))
-            error_msg = error_data.get('error', {}).get('message', 'OpenAI API error')
-            raise Exception(error_msg)
+        
+        if not response.text:
+            raise Exception("Empty response from model")
+            
+        return response.text
 
     def do_OPTIONS(self):
         """Handle CORS preflight"""
@@ -253,13 +166,9 @@ if __name__ == '__main__':
     print(f'Server running at http://localhost:{PORT}/')
     print(f'\nOpen your browser and go to: http://localhost:{PORT}/')
     print('\nSupported AI providers:')
-    print('  - Google Gemini (default)')
-    print('  - Anthropic Claude')
-    print('  - OpenAI GPT')
+    print('  - Google Gemini (Direct SDK)')
     print('\nConfigure models via environment variables or .env file:')
-    print(f'  GOOGLE_MODEL (default: gemini-2.0-flash)')
-    print(f'  ANTHROPIC_MODEL (default: claude-sonnet-4-20250514)')
-    print(f'  OPENAI_MODEL (default: gpt-4o-mini)')
+    print("  GOOGLE_MODEL:    Gemini model to use (default: gemini-3-flash-preview)")
     print('\nPress Ctrl+C to stop the server\n')
 
     try:

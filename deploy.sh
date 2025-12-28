@@ -22,13 +22,9 @@ gcloud run deploy $SERVICE_NAME \
   --region $REGION \
   --allow-unauthenticated \
   --set-env-vars "COUPLES_PASSWORD=${COUPLES_PASSWORD:-changeme123}" \
-  --set-env-vars "GOOGLE_API_KEY=${GOOGLE_API_KEY}" \
-  --set-env-vars "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}" \
-  --set-env-vars "OPENAI_API_KEY=${OPENAI_API_KEY}" \
-  --set-env-vars "GOOGLE_MODEL=${GOOGLE_MODEL:-gemini-2.0-flash}" \
-  --set-env-vars "ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-sonnet-4-20250514}" \
-  --set-env-vars "OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}" \
-  --set-env-vars "SESSION_SECRET=$(openssl rand -hex 32)"
+    --set-env-vars "GOOGLE_API_KEY=${GOOGLE_API_KEY}" \
+    --set-env-vars "GOOGLE_MODEL=${GOOGLE_MODEL:-gemini-3-flash-preview}" \
+    --set-env-vars "SESSION_SECRET=$(openssl rand -hex 32)"
 
 echo "Deployment complete!"
 echo "Your app is available at the URL shown above"

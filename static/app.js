@@ -2,8 +2,11 @@
 const gameState = {
     partner1: '',
     partner2: '',
-    apiKey: '',
-    provider: 'google', // 'google', 'anthropic', or 'openai'
+    provider: 'google', // Default to google
+    roundCount: 0,
+    memoryContext: '',
+    isVoiceEnabled: false,
+    usedQuestions: [],
     intensityPreference: 'romantic', // 'random', 'sweet', 'romantic', 'passionate', 'explicit'
     intensityLevel: 'romantic', // Current actual intensity (resolved from preference)
     currentPlayer: null,
@@ -17,22 +20,37 @@ const gameState = {
 // Question Pool Management
 const POOL_SIZE = 10;
 
-function getPoolKey(intensity, type) {
-    return `couples_pool_${intensity}_${type}`;
+const WILDCARDS = [
+    "Staring Contest: Stare into each other's eyes for 60 seconds without blinking.",
+    "Thumb War: Best of 3 wins a kiss.",
+    "Sync Breathing: Hold hands and synchronize your breathing for 1 minute.",
+    "Compliment Battle: Go back and forth giving compliments until someone hesitates.",
+    "Massage Swap: 1 minute shoulder massage for each partner.",
+    "Whisper Challenge: Whisper a sentence, partner has to guess what you said.",
+    "Slow Dance: Play a song and slow dance for 1 minute.",
+    "Forehead Touch: Touch foreheads and close eyes for 30 seconds.",
+    "Role Reversal: Imitate your partner for the next round.",
+    "Phone Swap: Let your partner scroll through your photos for 1 minute."
+];
+
+function getPoolKey(intensity, type, playerName) {
+    // Sanitize player name for storage key
+    const safeName = playerName.replace(/[^a-zA-Z0-9]/g, '');
+    return `couples_pool_${intensity}_${type}_${safeName} `;
 }
 
 function getUsedQuestionsKey() {
     return 'couples_used_questions_session';
 }
 
-function getQuestionPool(intensity, type) {
-    const key = getPoolKey(intensity, type);
+function getQuestionPool(intensity, type, playerName) {
+    const key = getPoolKey(intensity, type, playerName);
     const pool = localStorage.getItem(key);
     return pool ? JSON.parse(pool) : [];
 }
 
-function saveQuestionPool(intensity, type, questions) {
-    const key = getPoolKey(intensity, type);
+function saveQuestionPool(intensity, type, questions, playerName) {
+    const key = getPoolKey(intensity, type, playerName);
     localStorage.setItem(key, JSON.stringify(questions));
 }
 
@@ -47,32 +65,39 @@ function addUsedQuestion(question) {
     sessionStorage.setItem(getUsedQuestionsKey(), JSON.stringify(used));
 }
 
-function popQuestionFromPool(intensity, type) {
-    const pool = getQuestionPool(intensity, type);
+function popQuestionFromPool(intensity, type, playerName) {
+    const pool = getQuestionPool(intensity, type, playerName);
     if (pool.length === 0) return null;
 
     const question = pool.shift(); // Take first question
-    saveQuestionPool(intensity, type, pool);
+    saveQuestionPool(intensity, type, pool, playerName);
     return question;
 }
 
-async function generateQuestionPool(intensity, type) {
+async function generateQuestionPool(intensity, type, playerName) {
     const guidance = getIntensityGuidance(intensity);
     const usedQuestions = getUsedQuestions();
-    const otherPartner = gameState.currentPlayer === gameState.partner1 ? gameState.partner2 : gameState.partner1;
+    // Determine other partner based on the specific player we are generating for
+    const otherPartner = playerName === gameState.partner1 ? gameState.partner2 : gameState.partner1;
 
     let usedQuestionsText = '';
     if (usedQuestions.length > 0) {
-        usedQuestionsText = `\n\nPREVIOUSLY USED QUESTIONS (DO NOT REPEAT THESE):\n${usedQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}`;
+        usedQuestionsText = `\n\nPREVIOUSLY USED QUESTIONS(DO NOT REPEAT THESE): \n${usedQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n')} `;
+    }
+
+    let memoryContextText = '';
+    if (gameState.memoryContext) {
+        memoryContextText = `\nCONTEXT / MEMORIES: The couple has shared this context: "${gameState.memoryContext}".Use this to make questions specific and personal if possible.`;
     }
 
     let prompt;
     if (type === 'truth') {
         prompt = `Generate EXACTLY ${POOL_SIZE} unique truth questions for a couples truth or dare game.
 
-Current Player: ${gameState.currentPlayer}
+Current Player: ${playerName}
 Partner: ${otherPartner}
 Intensity Level: ${intensity.toUpperCase()} - ${guidance.description}
+${memoryContextText}
 
 INTENSITY GUIDELINES:
 ${guidance.truthTone}
@@ -82,22 +107,23 @@ ${guidance.truthExamples}
 
 Requirements:
 - Generate EXACTLY ${POOL_SIZE} different questions
-- Make them PERSONAL and SPECIFIC to their relationship
-- Use both partner names naturally in the questions when appropriate
-- Make them REVEALING and thought-provoking
-- Keep ALL questions at ${intensity} intensity level
-- Should create intimacy and connection
-- Be direct and clear
-- Each question must be DIFFERENT from each other${usedQuestionsText}
+    - Make them PERSONAL and SPECIFIC to their relationship
+        - Use both partner names naturally in the questions when appropriate
+            - Make them REVEALING and thought - provoking
+                - Keep ALL questions at ${intensity} intensity level
+                    - Should create intimacy and connection
+                        - Be direct and clear
+                            - Each question must be DIFFERENT from each other${usedQuestionsText}
 
-Return ONLY a JSON array of ${POOL_SIZE} questions. Format: ["question 1", "question 2", ...]
+Return ONLY a JSON array of ${POOL_SIZE} questions.Format: ["question 1", "question 2", ...]
 No markdown, no extra text, just the JSON array.`;
     } else {
         prompt = `Generate EXACTLY ${POOL_SIZE} unique dares for a couples truth or dare game.
 
-Current Player: ${gameState.currentPlayer}
+Current Player: ${playerName}
 Partner: ${otherPartner}
 Intensity Level: ${intensity.toUpperCase()} - ${guidance.description}
+${memoryContextText}
 
 INTENSITY GUIDELINES:
 ${guidance.dareTone}
@@ -107,16 +133,16 @@ ${guidance.dareExamples}
 
 Requirements:
 - Generate EXACTLY ${POOL_SIZE} different dares
-- Must be DOABLE RIGHT NOW in the moment
-- Should involve BOTH partners physically or emotionally
-- Keep ALL dares at ${intensity} intensity level
-- Be SPECIFIC about what to do
-- Include a time duration if relevant (e.g., "for 2 minutes")
-- Should create intimacy and connection
-- Be direct and clear
-- Each dare must be DIFFERENT from each other${usedQuestionsText}
+    - Must be DOABLE RIGHT NOW in the moment
+        - Should involve BOTH partners physically or emotionally
+            - Keep ALL dares at ${intensity} intensity level
+                - Be SPECIFIC about what to do
+    - Include a time duration if relevant(e.g., "for 2 minutes")
+        - Should create intimacy and connection
+            - Be direct and clear
+                - Each dare must be DIFFERENT from each other${usedQuestionsText}
 
-Return ONLY a JSON array of ${POOL_SIZE} dares. Format: ["dare 1", "dare 2", ...]
+Return ONLY a JSON array of ${POOL_SIZE} dares.Format: ["dare 1", "dare 2", ...]
 No markdown, no extra text, just the JSON array.`;
     }
 
@@ -126,8 +152,9 @@ No markdown, no extra text, just the JSON array.`;
         // Parse the JSON array
         let questions;
         try {
-            // Clean up the response - remove markdown if present
-            const cleanedResult = result.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+            // Robustly extract JSON array (handling potential markdown or intro text)
+            const match = result.match(/\[[\s\S]*\]/);
+            const cleanedResult = match ? match[0] : result;
             questions = JSON.parse(cleanedResult);
 
             if (!Array.isArray(questions)) {
@@ -136,7 +163,7 @@ No markdown, no extra text, just the JSON array.`;
 
             // Ensure we have exactly POOL_SIZE questions
             if (questions.length < POOL_SIZE) {
-                console.warn(`Generated only ${questions.length} questions instead of ${POOL_SIZE}`);
+                console.warn(`Generated only ${questions.length} questions instead of ${POOL_SIZE} `);
             }
 
             // Take only the first POOL_SIZE questions
@@ -148,7 +175,7 @@ No markdown, no extra text, just the JSON array.`;
         }
 
         // Save to localStorage
-        saveQuestionPool(intensity, type, questions);
+        saveQuestionPool(intensity, type, questions, playerName);
 
         return questions;
     } catch (error) {
@@ -157,102 +184,175 @@ No markdown, no extra text, just the JSON array.`;
     }
 }
 
-// DOM Elements
-const setupScreen = document.getElementById('setup-screen');
-const selectionScreen = document.getElementById('selection-screen');
-const choiceScreen = document.getElementById('choice-screen');
-const promptScreen = document.getElementById('prompt-screen');
+// DOM Elements - Initialized in DOMContentLoaded
+let setupScreen, selectionScreen, choiceScreen, promptScreen;
+let partner1Input, partner2Input, apiKeyInput, memoryCtxInput, startGameBtn;
+let nameSpinner, selectedPlayerDiv, currentPlayerDiv;
+let truthBtn, dareBtn, scoresDiv;
+let promptPlayer, promptLoading, promptDisplay, nextRoundBtn, skipDareBtn, endGameBtn, voiceToggleBtn;
 
-const partner1Input = document.getElementById('partner1-name');
-const partner2Input = document.getElementById('partner2-name');
-const apiKeyInput = document.getElementById('api-key');
-const startGameBtn = document.getElementById('start-game-btn');
+// Robust Initialization
+function init() {
+    console.log('Initializing App...');
 
-const nameSpinner = document.getElementById('name-spinner');
-const selectedPlayerDiv = document.getElementById('selected-player');
-const currentPlayerDiv = document.getElementById('current-player');
+    // Initialize DOM Elements
+    setupScreen = document.getElementById('setup-screen');
+    selectionScreen = document.getElementById('selection-screen');
+    choiceScreen = document.getElementById('choice-screen');
+    promptScreen = document.getElementById('prompt-screen');
 
-const truthBtn = document.getElementById('truth-btn');
-const dareBtn = document.getElementById('dare-btn');
-const scoresDiv = document.getElementById('scores');
+    partner1Input = document.getElementById('partner1-name');
+    partner2Input = document.getElementById('partner2');
+    apiKeyInput = document.getElementById('api-key');
+    memoryCtxInput = document.getElementById('memoryCtx');
+    startGameBtn = document.getElementById('start-game-btn');
 
-const promptPlayer = document.getElementById('prompt-player');
-const promptLoading = document.getElementById('prompt-loading');
-const promptDisplay = document.getElementById('prompt-display');
-const nextRoundBtn = document.getElementById('next-round-btn');
-const skipDareBtn = document.getElementById('skip-dare-btn');
-const endGameBtn = document.getElementById('end-game-btn');
+    nameSpinner = document.getElementById('name-spinner');
+    selectedPlayerDiv = document.getElementById('selected-player');
+    currentPlayerDiv = document.getElementById('current-player');
 
-// Event Listeners
-partner1Input.addEventListener('input', updateStartButton);
-partner2Input.addEventListener('input', updateStartButton);
-apiKeyInput.addEventListener('input', () => {
-    gameState.apiKey = apiKeyInput.value.trim();
-    updateStartButton();
-});
+    truthBtn = document.getElementById('truth-btn');
+    dareBtn = document.getElementById('dare-btn');
+    scoresDiv = document.getElementById('scores');
 
-// Provider selection listeners
-document.querySelectorAll('input[name="ai-provider"]').forEach(radio => {
-    radio.addEventListener('change', (e) => {
-        gameState.provider = e.target.value;
-        updateAPILink();
-    });
-});
+    promptPlayer = document.getElementById('prompt-player');
+    promptLoading = document.getElementById('prompt-loading');
+    promptDisplay = document.getElementById('prompt-display');
+    nextRoundBtn = document.getElementById('next-round-btn');
+    skipDareBtn = document.getElementById('skip-dare-btn');
+    endGameBtn = document.getElementById('end-game-btn');
+    voiceToggleBtn = document.getElementById('voice-toggle-btn');
 
-// Intensity level listeners (setup screen)
-document.querySelectorAll('input[name="intensity"]').forEach(radio => {
-    radio.addEventListener('change', (e) => {
-        gameState.intensityPreference = e.target.value;
-        // If random is selected, default to romantic until first resolution
-        if (e.target.value === 'random') {
-            gameState.intensityLevel = 'romantic';
-        } else {
-            gameState.intensityLevel = e.target.value;
+    // Attach Event Listeners
+    if (partner1Input) partner1Input.addEventListener('input', updateStartButton);
+    if (partner2Input) partner2Input.addEventListener('input', updateStartButton);
+    if (memoryCtxInput) {
+        memoryCtxInput.addEventListener('input', () => {
+            gameState.memoryContext = memoryCtxInput.value.trim();
+        });
+    }
+
+    if (startGameBtn) {
+        console.log('Attaching Start Game listener');
+        startGameBtn.addEventListener('click', startGame);
+    } else {
+        console.error('CRITICAL: Start Game button not found in DOM');
+    }
+
+    if (truthBtn) truthBtn.addEventListener('click', () => handleChoice('truth'));
+    if (dareBtn) dareBtn.addEventListener('click', () => handleChoice('dare'));
+    if (nextRoundBtn) nextRoundBtn.addEventListener('click', startNewRound);
+    if (skipDareBtn) skipDareBtn.addEventListener('click', skipDare);
+    if (endGameBtn) endGameBtn.addEventListener('click', endGame);
+    if (voiceToggleBtn) voiceToggleBtn.addEventListener('click', toggleVoiceMode);
+
+    // Intensity listeners
+    initializeIntensityListeners();
+    console.log('App Initialized Successfully');
+}
+
+// Check if DOM is already ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+} else {
+    init();
+}
+
+/* --- CUSTOM MODAL IMPLEMENTATION --- */
+function showModal(title, body, buttons = []) {
+    return new Promise((resolve) => {
+        const overlay = document.getElementById('modal-overlay');
+        const titleEl = document.getElementById('modal-title');
+        const bodyEl = document.getElementById('modal-body');
+        const actionsEl = document.getElementById('modal-actions');
+
+        if (!overlay) {
+            // Fallback if modal elements missing
+            console.error('Modal elements missing');
+            return resolve(false);
         }
-    });
-});
 
-// Intensity switcher listeners (during gameplay)
-document.addEventListener('DOMContentLoaded', () => {
+        titleEl.textContent = title;
+        // Allow HTML in body for formatting
+        bodyEl.innerHTML = body.replace(/\n/g, '<br>');
+        actionsEl.innerHTML = '';
+
+        if (buttons.length === 0) {
+            // Default OK button
+            buttons = [{ text: 'OK', primary: true, value: true }];
+        }
+
+        buttons.forEach(btn => {
+            const btnEl = document.createElement('button');
+            btnEl.textContent = btn.text;
+            btnEl.className = `modal-btn ${btn.primary ? 'modal-btn-primary' : 'modal-btn-secondary'}`;
+            btnEl.onclick = () => {
+                overlay.classList.remove('active');
+                resolve(btn.value);
+            };
+            actionsEl.appendChild(btnEl);
+        });
+
+        overlay.classList.add('active');
+    });
+}
+
+function initializeIntensityListeners() {
+    // Intensity level listeners (setup screen)
+    document.querySelectorAll('input[name="intensity"]').forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            gameState.intensityPreference = e.target.value;
+            // If random is selected, default to romantic until first resolution
+            if (e.target.value === 'random') {
+                gameState.intensityLevel = 'romantic';
+            } else {
+                gameState.intensityLevel = e.target.value;
+            }
+            updateTheme(gameState.intensityLevel);
+        });
+    });
+
+    // Intensity switcher listeners (during gameplay)
     document.querySelectorAll('.intensity-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             const intensity = btn.getAttribute('data-intensity');
+            // The voice toggle button also has class 'intensity-btn' but no data-intensity
+            if (!intensity) return;
             gameState.intensityPreference = intensity;
             // If random is selected, keep current level until next resolution
             if (intensity !== 'random') {
                 gameState.intensityLevel = intensity;
             }
             updateIntensitySwitcher();
+            updateTheme(gameState.intensityLevel);
         });
     });
-});
+}
 
 function updateAPILink() {
     const apiLink = document.getElementById('api-link');
-    if (gameState.provider === 'google') {
-        apiLink.innerHTML = 'Get your free API key from <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>';
-        apiKeyInput.placeholder = 'Enter your Google AI API Key';
-    } else if (gameState.provider === 'openai') {
-        apiLink.innerHTML = 'Get your API key from <a href="https://platform.openai.com/api-keys" target="_blank">OpenAI Platform</a>';
-        apiKeyInput.placeholder = 'Enter your OpenAI API Key';
-    } else {
-        apiLink.innerHTML = 'Get your API key from <a href="https://console.anthropic.com/" target="_blank">Anthropic Console</a>';
-        apiKeyInput.placeholder = 'Enter your Anthropic API Key';
+    if (apiLink) {
+        apiLink.innerHTML = 'Get your free Gemini API key from <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>';
+    }
+    if (apiKeyInput) {
+        apiKeyInput.placeholder = 'Enter your Gemini API Key';
     }
 }
 
-startGameBtn.addEventListener('click', startGame);
-truthBtn.addEventListener('click', () => handleChoice('truth'));
-dareBtn.addEventListener('click', () => handleChoice('dare'));
-nextRoundBtn.addEventListener('click', startNewRound);
-skipDareBtn.addEventListener('click', skipDare);
-endGameBtn.addEventListener('click', endGame);
+document.addEventListener('DOMContentLoaded', () => {
+    if (startGameBtn) startGameBtn.addEventListener('click', startGame);
+    if (truthBtn) truthBtn.addEventListener('click', () => handleChoice('truth'));
+    if (dareBtn) dareBtn.addEventListener('click', () => handleChoice('dare'));
+    if (nextRoundBtn) nextRoundBtn.addEventListener('click', startNewRound);
+    if (skipDareBtn) skipDareBtn.addEventListener('click', skipDare);
+    if (endGameBtn) endGameBtn.addEventListener('click', endGame);
+});
 
 // Functions
 function updateStartButton() {
-    gameState.partner1 = partner1Input.value.trim();
-    gameState.partner2 = partner2Input.value.trim();
-    startGameBtn.disabled = !gameState.partner1 || !gameState.partner2 || !gameState.apiKey;
+    if (partner1Input) gameState.partner1 = partner1Input.value.trim();
+    if (partner2Input) gameState.partner2 = partner2Input.value.trim();
+    // We handle validation in startGame() now
 }
 
 function switchScreen(hideScreen, showScreen) {
@@ -260,7 +360,31 @@ function switchScreen(hideScreen, showScreen) {
     showScreen.classList.add('active');
 }
 
-function startGame() {
+function startGame(e) {
+    if (e) e.preventDefault();
+    console.log('🚀 Start Game function triggered!');
+
+    // Explicitly capture all values
+    const p1 = partner1Input ? partner1Input.value : '';
+    const p2 = partner2Input ? partner2Input.value : '';
+
+    console.log('Captured Values:', {
+        p1: '"' + p1 + '"',
+        p2: '"' + p2 + '"'
+    });
+
+    // Validate
+    if (!p1.trim() || !p2.trim()) {
+        console.warn('❌ Validation Failed: Missing names');
+        alert('Please enter both names to start!');
+        return;
+    }
+
+    gameState.partner1 = p1.trim();
+    gameState.partner2 = p2.trim();
+    gameState.memoryContext = memoryCtxInput ? memoryCtxInput.value.trim() : '';
+
+    console.log('✅ Validation passed. Switching screens...');
     switchScreen(setupScreen, selectionScreen);
     selectRandomPlayer();
 }
@@ -316,7 +440,7 @@ function updateCurrentPlayerDisplay() {
         };
         const emoji = intensityEmojis[gameState.intensityLevel] || '🎲';
         const intensityName = gameState.intensityLevel.charAt(0).toUpperCase() + gameState.intensityLevel.slice(1);
-        currentPlayerDiv.innerHTML = `${gameState.currentPlayer}'s Turn <span class="intensity-badge">${emoji} ${intensityName}</span>`;
+        currentPlayerDiv.innerHTML = `${gameState.currentPlayer} 's Turn <span class="intensity-badge">${emoji} ${intensityName}</span>`;
     } else {
         currentPlayerDiv.textContent = `${gameState.currentPlayer}'s Turn`;
     }
@@ -350,6 +474,13 @@ function updateIntensitySwitcher() {
             btn.classList.remove('active');
         }
     });
+}
+
+function updateTheme(intensity) {
+    // Remove existing theme classes
+    document.body.classList.remove('theme-sweet', 'theme-romantic', 'theme-passionate', 'theme-explicit');
+    // Add new theme class
+    document.body.classList.add(`theme-${intensity}`);
 }
 
 function resolveIntensity() {
@@ -424,15 +555,33 @@ async function handleChoice(choice) {
         gameState.scores[playerKey].dares++;
     }
 
-    try {
-        // Try to get a question from the pool
-        let question = popQuestionFromPool(gameState.intensityLevel, choice);
+    // Increment Round Count
+    gameState.roundCount++;
 
-        // If pool is empty, generate a new pool
-        if (!question) {
-            promptLoading.innerHTML = '<p>Generating fresh questions...</p>';
-            await generateQuestionPool(gameState.intensityLevel, choice);
-            question = popQuestionFromPool(gameState.intensityLevel, choice);
+    // Check for Escalation (Every 5 rounds)
+    if (gameState.roundCount > 0 && gameState.roundCount % 5 === 0) {
+        checkEscalation();
+    }
+
+    try {
+        let question;
+        let isWildcard = false;
+
+        // 10% Chance for Wildcard (if not explicitly choosing Truth/Dare specific logic that forbids it, but let's allow it as a surprise)
+        if (Math.random() < 0.1) {
+            isWildcard = true;
+            question = WILDCARDS[Math.floor(Math.random() * WILDCARDS.length)];
+        } else {
+            // Normal Question Flow
+            // Try to get a question from the pool
+            question = popQuestionFromPool(gameState.intensityLevel, choice, gameState.currentPlayer);
+
+            // If pool is empty, generate a new pool
+            if (!question) {
+                promptLoading.innerHTML = '<p>Generating fresh questions...</p>';
+                await generateQuestionPool(gameState.intensityLevel, choice, gameState.currentPlayer);
+                question = popQuestionFromPool(gameState.intensityLevel, choice, gameState.currentPlayer);
+            }
         }
 
         if (!question) {
@@ -447,19 +596,50 @@ async function handleChoice(choice) {
         // Format the prompt nicely
         const formattedPrompt = question.trim().replace(/^["']|["']$/g, '');
 
-        const icon = choice === 'truth' ? '💭' : '⚡';
-        const title = choice === 'truth' ? 'Truth Question' : 'Dare Challenge';
+        let icon = choice === 'truth' ? '💭' : '⚡';
+        let title = choice === 'truth' ? 'Truth Question' : 'Dare Challenge';
+
+        if (isWildcard) {
+            icon = '🃏';
+            title = 'WILDCARD!';
+        }
 
         promptDisplay.innerHTML = `
             <div class="prompt-icon">${icon}</div>
             <h3 class="prompt-title">${title}</h3>
             <div class="prompt-text">${formattedPrompt}</div>
         `;
+
+        // Speak the prompt
+        speakText(formattedPrompt);
     } catch (error) {
         console.error('Error generating prompt:', error);
         promptLoading.innerHTML = `
             <p style="color: red;">Error: ${error.message}</p>
         `;
+    }
+}
+
+function checkEscalation() {
+    const levels = ['sweet', 'romantic', 'passionate', 'explicit'];
+    const currentIdx = levels.indexOf(gameState.intensityLevel);
+
+    if (currentIdx < levels.length - 1) {
+        const nextLevel = levels[currentIdx + 1];
+
+        // Use custom modal instead of alert
+        showModal(
+            'Things are heating up! 🔥',
+            `Moving to ${nextLevel.toUpperCase()} level!`,
+            [{ text: "Let's Go!", primary: true, value: true }]
+        );
+
+        gameState.intensityLevel = nextLevel;
+        updateTheme(nextLevel);
+
+        // Find the radio button and check it
+        const radio = document.querySelector(`input[name="intensity"][value="${nextLevel}"]`);
+        if (radio) radio.checked = true;
     }
 }
 
@@ -470,13 +650,13 @@ async function skipDare() {
 
     try {
         // Try to get a dare from the pool
-        let question = popQuestionFromPool(gameState.intensityLevel, 'dare');
+        let question = popQuestionFromPool(gameState.intensityLevel, 'dare', gameState.currentPlayer);
 
         // If pool is empty, generate a new pool
         if (!question) {
             promptLoading.innerHTML = '<p>Generating fresh dares...</p>';
-            await generateQuestionPool(gameState.intensityLevel, 'dare');
-            question = popQuestionFromPool(gameState.intensityLevel, 'dare');
+            await generateQuestionPool(gameState.intensityLevel, 'dare', gameState.currentPlayer);
+            question = popQuestionFromPool(gameState.intensityLevel, 'dare', gameState.currentPlayer);
         }
 
         if (!question) {
@@ -504,6 +684,8 @@ async function skipDare() {
 }
 
 async function callAIAPI(prompt, isTextResponse = false) {
+    console.log('Calling Gemini API');
+
     try {
         const response = await fetch('/api/generate', {
             method: 'POST',
@@ -511,10 +693,8 @@ async function callAIAPI(prompt, isTextResponse = false) {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                apiKey: gameState.apiKey,
                 prompt: prompt,
-                isTextResponse: isTextResponse,
-                provider: gameState.provider
+                isTextResponse: isTextResponse
             })
         });
 
@@ -558,26 +738,101 @@ function startNewRound() {
     selectRandomPlayer();
 }
 
-function endGame() {
-    if (confirm('Are you sure you want to end the game?')) {
+async function endGame() {
+    // Custom Modal Confirmation
+    const confirmed = await showModal(
+        'End Game?',
+        'Are you sure you want to end the game now?',
+        [
+            { text: 'Cancel', primary: false, value: false },
+            { text: 'End Game', primary: true, value: true }
+        ]
+    );
+
+    if (confirmed) {
         const p1Scores = gameState.scores.partner1;
         const p2Scores = gameState.scores.partner2;
+        const totalRounds = p1Scores.truths + p1Scores.dares + p2Scores.truths + p2Scores.dares;
 
-        alert(`Final Scores:\n\n${gameState.partner1}:\nTruths: ${p1Scores.truths} | Dares: ${p1Scores.dares}\n\n${gameState.partner2}:\nTruths: ${p2Scores.truths} | Dares: ${p2Scores.dares}\n\nThanks for playing!`);
+        // Calculate Connection Score (Mock Algorithm)
+        // Base score 60 + 2 points per round + bonus for higher intensity
+        let score = 60 + (totalRounds * 2);
+        if (gameState.intensityLevel === 'passionate') score += 10;
+        if (gameState.intensityLevel === 'explicit') score += 20;
+        if (score > 100) score = 100;
 
-        // Reset game state
-        gameState.currentPlayer = null;
-        gameState.lastPlayer = null;
-        gameState.scores = {
-            partner1: { truths: 0, dares: 0 },
-            partner2: { truths: 0, dares: 0 }
-        };
+        // Determine Vibe
+        let vibe = 'Playful & Cute';
+        if (score > 80) vibe = 'Deeply Connected';
+        if (score > 90) vibe = 'Soulmates';
+        if (gameState.intensityLevel === 'explicit' && totalRounds > 5) vibe = 'Sensual & Spicy';
 
-        // Reset screens
-        nameSpinner.style.display = 'block';
-        nameSpinner.textContent = '';
-        selectedPlayerDiv.textContent = '';
+        const message = `
+📊 <strong>GAME OVER SUMMARY</strong> 📊
 
-        switchScreen(promptScreen, setupScreen);
+<strong>${gameState.partner1}</strong>: ${p1Scores.truths} Truths | ${p1Scores.dares} Dares
+<strong>${gameState.partner2}</strong>: ${p2Scores.truths} Truths | ${p2Scores.dares} Dares
+
+🔥 Final Intensity: ${gameState.intensityLevel.toUpperCase()}
+❤️ Connection Score: ${score}/100
+✨ Relationship Vibe: ${vibe}
+
+Thanks for playing!
+        `;
+
+        await showModal('Game Over', message, [{ text: 'Back to Start', primary: true, value: true }]);
+
+        // Force reload for a clean slate
+        window.location.reload();
+    }
+}
+
+// Voice Mode Functions
+function toggleVoiceMode() {
+    gameState.isVoiceEnabled = !gameState.isVoiceEnabled;
+
+    if (voiceToggleBtn) {
+        if (gameState.isVoiceEnabled) {
+            voiceToggleBtn.textContent = '🔊 Voice Mode: ON';
+            voiceToggleBtn.style.color = '#e91e63';
+            voiceToggleBtn.style.borderColor = '#e91e63';
+        } else {
+            voiceToggleBtn.textContent = '🔊 Voice Mode: OFF';
+            voiceToggleBtn.style.color = '#555';
+            voiceToggleBtn.style.borderColor = 'transparent';
+            // Stop any ongoing speech
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+            }
+        }
+    }
+}
+
+function speakText(text) {
+    if (!gameState.isVoiceEnabled) return;
+
+    if ('speechSynthesis' in window) {
+        // Cancel any ongoing speech
+        window.speechSynthesis.cancel();
+
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 0.9;
+        utterance.pitch = 1;
+        utterance.volume = 1;
+
+        // Try to use a female voice if available
+        const voices = window.speechSynthesis.getVoices();
+        const femaleVoice = voices.find(voice =>
+            voice.name.includes('Female') ||
+            voice.name.includes('Samantha') ||
+            voice.name.includes('Karen') ||
+            voice.name.includes('Moira')
+        );
+
+        if (femaleVoice) {
+            utterance.voice = femaleVoice;
+        }
+
+        window.speechSynthesis.speak(utterance);
     }
 }

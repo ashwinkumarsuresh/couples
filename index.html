@@ -1,11 +1,19 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Couples Game - Truth or Dare</title>
-    <link rel="stylesheet" href="styles.css">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Quicksand:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="static/styles.css">
 </head>
+
 <body>
     <div class="game-container">
         <!-- Setup Screen -->
@@ -24,9 +32,16 @@
                         <input type="text" id="partner1-name" placeholder="First partner's name" class="input-field">
                     </div>
                     <div class="input-group">
-                        <label for="partner2-name">Partner 2</label>
-                        <input type="text" id="partner2-name" placeholder="Second partner's name" class="input-field">
+                        <label for="partner2">Partner 2 Name</label>
+                        <input type="text" id="partner2" class="input-field" placeholder="e.g. Bob">
                     </div>
+                </div>
+
+                <!-- Memory Lane Input -->
+                <div class="input-group">
+                    <label for="memoryCtx">Shared Memories / Context (Optional)</label>
+                    <textarea id="memoryCtx" class="input-field" rows="3"
+                        placeholder="e.g., We went to Paris last year, we love hiking, we argue about dishes..."></textarea>
                 </div>
 
                 <div class="intensity-selection">
@@ -75,29 +90,7 @@
                     </div>
                 </div>
 
-                <div class="api-setup">
-                    <h3>AI Model Selection</h3>
-                    <div class="model-selection">
-                        <label class="model-option">
-                            <input type="radio" name="ai-provider" value="google" checked>
-                            <span class="model-name">Google Gemini</span>
-                        </label>
-                        <label class="model-option">
-                            <input type="radio" name="ai-provider" value="anthropic">
-                            <span class="model-name">Anthropic Claude</span>
-                        </label>
-                        <label class="model-option">
-                            <input type="radio" name="ai-provider" value="openai">
-                            <span class="model-name">OpenAI GPT</span>
-                        </label>
-                    </div>
-                    <input type="password" id="api-key" placeholder="Enter your API Key" class="input-field">
-                    <small id="api-link">
-                        Get your free API key from <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>
-                    </small>
-                </div>
-
-                <button id="start-game-btn" class="btn btn-success" disabled>Start Game!</button>
+                <button id="start-game-btn" class="btn btn-success">Start Game!</button>
             </div>
         </div>
 
@@ -126,6 +119,13 @@
                         <button class="intensity-btn" data-intensity="passionate">🔥 Passionate</button>
                         <button class="intensity-btn" data-intensity="explicit">💋 Explicit</button>
                     </div>
+                </div>
+
+                <!-- Immersion Controls -->
+                <div class="immersion-controls" style="text-align: center; margin-bottom: 20px;">
+                    <button id="voice-toggle-btn" class="intensity-btn" style="background: white; color: #555;">
+                        🔊 Voice Mode: OFF
+                    </button>
                 </div>
 
                 <div id="scores" class="scores"></div>
@@ -159,7 +159,8 @@
                 <div id="prompt-display" class="prompt-display"></div>
 
                 <div class="action-buttons">
-                    <button id="skip-dare-btn" class="btn btn-secondary" style="display: none;">Skip & Get New Dare</button>
+                    <button id="skip-dare-btn" class="btn btn-secondary" style="display: none;">Skip & Get New
+                        Dare</button>
                     <button id="next-round-btn" class="btn btn-success">Done - Next Round</button>
                     <button id="end-game-btn" class="btn btn-danger">End Game</button>
                 </div>
@@ -167,6 +168,20 @@
         </div>
     </div>
 
-    <script src="app.js"></script>
+    <!-- Custom Modal Overlay -->
+    <div id="modal-overlay" class="modal-overlay">
+        <div class="modal-container">
+            <h3 id="modal-title" class="modal-title">Title</h3>
+            <div id="modal-body" class="modal-body">
+                Content goes here...
+            </div>
+            <div id="modal-actions" class="modal-actions">
+                <!-- Buttons will be injected here -->
+            </div>
+        </div>
+    </div>
+
+    <script src="static/app.js?v=2"></script>
 </body>
+
 </html>
